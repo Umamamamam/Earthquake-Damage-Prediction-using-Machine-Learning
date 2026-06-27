@@ -1,188 +1,110 @@
-# Earthquake Damage Prediction using Machine Learning
+# Earthquake Damage Prediction
 
 ## Overview
 
-This project focuses on predicting the severity of building damage caused by the 2015 Gorkha Earthquake in Nepal. Using machine learning techniques and structural, geographical, and socio-economic features of buildings, the model classifies the level of damage into different categories.
+This project predicts the level of damage caused to buildings during the 2015 Gorkha earthquake in Nepal. The data comes from the "Richter's Predictor: Modeling Earthquake Damage" competition hosted by DrivenData, originally collected by Kathmandu Living Labs and the Central Bureau of Statistics, Nepal.
 
-The objective is to assist disaster management authorities, government agencies, and urban planners in identifying vulnerable structures and prioritizing relief and reconstruction efforts.
+The goal is to predict `damage_grade`, which has 3 possible values:
 
----
+- 1 = low damage
+- 2 = medium damage
+- 3 = almost complete destruction
 
-## Problem Statement
+## Folder Structure
 
-Earthquakes can cause varying levels of damage to buildings depending on their construction materials, design, location, and surrounding conditions. Accurately predicting damage severity helps emergency responders allocate resources effectively and reduce future risks.
+```
+project/
+├── dataset/
+│   ├── train_values.csv
+│   └── train_labels.csv
+├── notebook/
+│   └── earthquake_prediction.ipynb
+├── model/
+│   └── xgboost_model.pkl
+└── README.md
+```
 
-The goal of this project is to build a machine learning model that predicts the **damage_grade** of a building based on its characteristics.
+- `dataset/` — contains the raw input data (`train_values.csv`, `train_labels.csv`)
+- `notebook/` — contains the main Jupyter notebook with all preprocessing, training, and evaluation steps
+- `model/` — contains the final saved model (`xgboost_model.pkl`)
 
----
+## Dataset
 
-## Dataset Information
+The dataset has 38 features describing each building, including:
 
-The dataset contains information about buildings affected by the Nepal earthquake, including:
+- Location (geo_level_1_id, geo_level_2_id, geo_level_3_id)
+- Structure details (count_floors_pre_eq, age, area_percentage, height_percentage)
+- Construction type (foundation_type, roof_type, ground_floor_type, other_floor_type, plan_configuration)
+- Superstructure material flags (mud, stone, brick, timber, bamboo, reinforced concrete, etc.)
+- Ownership and usage details (legal_ownership_status, count_families, secondary use flags)
 
-* Structural characteristics
-* Building age
-* Foundation type
-* Roof type
-* Number of floors
-* Geographic location
-* Land conditions
-* Construction materials
-* Ownership details
+Categorical columns are obfuscated with random lowercase letters, so the same letter in different columns does not mean the same real-world value.
 
-### Target Variable
+## Steps Followed
 
-**damage_grade**
+1. **Loaded and merged data**
+   Combined `train_values.csv` and `train_labels.csv` using `building_id`, then dropped the ID column since it carries no predictive information.
 
-* Grade 1 → Low Damage
-* Grade 2 → Moderate Damage
-* Grade 3 → Severe Damage
+2. **Outlier handling**
+   Checked numerical columns using boxplots. Found outliers in several features. Used the IQR method with clipping (instead of removing rows) so no data was lost while reducing the effect of extreme values.
 
----
+3. **Skewness check and fix**
+   `age` and `area_percentage` were highly right-skewed. Applied `log1p` transformation to reduce skewness and make the distribution more balanced for training.
+   `count_families` was left as is, since it only has 3 unique values and is a discrete feature, not a continuous one, so log transformation does not help here.
 
-## Project Workflow
+4. **Missing value check**
+   Verified there were no missing values in the dataset, so no imputation was needed.
 
-### 1. Data Collection
+5. **Encoding categorical features**
+   Applied One-Hot Encoding using `pd.get_dummies()` since models cannot work directly with text/category values.
 
-* Imported earthquake damage dataset
-* Inspected dataset structure
-* Identified missing values
+6. **Train-test split**
+   Split the data into training and testing sets (80/20) to evaluate the model on unseen data. A stratified split was used in later steps to keep the class proportions consistent, since `damage_grade` is imbalanced.
 
-### 2. Exploratory Data Analysis (EDA)
+7. **Feature importance based selection**
+   Trained an initial XGBoost model and checked feature importance. Removed features with very low importance (below 0.001) to reduce noise and dimensionality, then retrained the model on this smaller feature set.
 
-* Distribution of target classes
-* Correlation analysis
-* Feature importance analysis
-* Outlier detection
-* Data visualization using histograms and boxplots
+8. **Hyperparameter tuning**
+   Used `RandomizedSearchCV` to tune XGBoost hyperparameters (n_estimators, max_depth, learning_rate, subsample, colsample_bytree). Tuning gave little to no improvement over the original model, so the original XGBoost model was kept as final.
 
-### 3. Data Preprocessing
+## Models Tried and Results
 
-* Missing value treatment
-* Encoding categorical variables
-* Feature scaling
-* Handling class imbalance
-* Feature engineering
+| Model | Weighted F1-Score |
+|---|---|
+| Logistic Regression | 0.53 |
+| Decision Tree | 0.65 |
+| Random Forest | 0.67 |
+| Gradient Boosting | 0.71 |
+| XGBoost | 0.73 |
 
-### 4. Model Building
+XGBoost achieved the highest weighted F1-score and was selected as the final model.
 
-Implemented multiple machine learning algorithms:
+## Why SVM and KNN Were Not Used
 
-* Logistic Regression
-* Decision Tree
-* Random Forest
-* XGBoost
-* Gradient Boosting
+- **KNN** struggles when there are many columns (high dimensionality), which is the case here after one-hot encoding. Distance-based methods like KNN become unreliable in high dimensions, and KNN is also slow at prediction time with a large number of rows.
+- **SVM** becomes very slow to train as the number of rows grows. With 260,000+ rows in this dataset, SVM training time becomes impractical.
+- Tree-based and boosting models handle this kind of large, mixed categorical and numerical dataset much better, which is why they were the main focus of this project.
 
-### 5. Model Evaluation
+## Final Model
 
-Performance metrics used:
+**XGBoost** was selected as the final model because it achieved the highest weighted F1-score among all models tested. The trained model is saved as `model/xgboost_model.pkl` using `pickle`.
 
-* Accuracy
-* Precision
-* Recall
-* F1-Score
-* Confusion Matrix
+## Challenges
 
----
-
-## Technologies Used
-
-* Python
-* Pandas
-* NumPy
-* Matplotlib
-* Seaborn
-* Scikit-Learn
-* XGBoost
-* Jupyter Notebook
-
----
-
-## Results
-
-The XGBoost model achieved the best performance among all tested algorithms.
-
-| Model               | Accuracy |
-| ------------------- | -------- |
-| Logistic Regression | XX%      |
-| Decision Tree       | XX%      |
-| Random Forest       | XX%      |
-| XGBoost             | 71%      |
-
-The model successfully identified damage severity patterns based on building and geographical characteristics.
-
----
-
-## Key Insights
-
-* Building age significantly impacts damage severity.
-* Construction material is one of the strongest predictors.
-* Buildings with weak foundations are more vulnerable.
-* Geographic location influences earthquake impact.
-* Structural design plays a critical role in earthquake resistance.
-
----
+- Large dataset increased training time.
+- Hyperparameter tuning required additional computation.
 
 ## Future Improvements
 
-* Hyperparameter optimization using GridSearchCV.
-* Advanced feature engineering.
-* Ensemble learning techniques.
-* Deep learning approaches.
-* Deployment using Flask or Streamlit.
-* Real-time earthquake damage prediction dashboard.
+- Try LightGBM.
+- Explore additional feature engineering.
+- Use cross-validation with more folds for further evaluation.
 
----
+## How to Run
 
-## Project Structure
-
-```text
-Earthquake-Damage-Prediction/
-│
-├── data/
-│   ├── train.csv
-│   └── test.csv
-│
-├── notebooks/
-│   └── Earthquake_Damage_Prediction.ipynb
-│
-├── models/
-│   └── trained_model.pkl
-│
-├── images/
-│   └── visualizations
-│
-├── README.md
-│
-└── requirements.txt
-```
-
----
-
-## Business Impact
-
-This solution can help:
-
-* Government disaster response teams
-* Urban planning departments
-* Insurance companies
-* Emergency management authorities
-* NGOs involved in disaster recovery
-
-By predicting building vulnerability before disasters occur, stakeholders can make informed decisions and reduce potential losses.
-
----
-
-## Author
-
-**Umamaheshwar Reddy**
-
-B.Tech CSE (AI & ML)
-Alliance University, Bengaluru
-
----
-
-## License
-
-This project is licensed under the MIT License.
+1. Place `train_values.csv` and `train_labels.csv` inside the `dataset/` folder.
+2. Install required libraries:
+   ```
+   pip install pandas numpy scikit-learn seaborn matplotlib xgboost
+   ```
+3. Run the notebook `notebook/earthquake_prediction.ipynb` from top to bottom in order.
